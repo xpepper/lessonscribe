@@ -25,16 +25,12 @@ This repository contains source code, not a packaged installer yet. To use the a
 
 ## How To Run The App
 
-1. Start the backend server
-2. Start the frontend dev server
-3. Open the frontend URL shown in the terminal, usually `http://127.0.0.1:5173`
-4. Upload an `mp3`, `m4a`, or `wav` lecture
-5. Pick a Whisper model and click `Transcribe`
+1. Run `make dev`
+2. Open the frontend URL shown in the terminal, usually `http://127.0.0.1:5173`
+3. Upload an `mp3`, `m4a`, or `wav` lecture
+4. Pick a Whisper model and click `Transcribe`
 
-You need two terminals open while using the app:
-
-- Terminal 1 runs the backend on port `8000`
-- Terminal 2 runs the frontend on port `5173`
+`make dev` starts both the backend on port `8000` and the frontend on port `5173` in one terminal. Press `Ctrl+C` to stop both.
 
 ## Install From Scratch
 
@@ -128,14 +124,33 @@ cd lessonscribe
 
 If you already have the repository on disk, just open a terminal in the project folder.
 
+## Quick Start
+
+If your backend virtual environment and frontend dependencies are already installed, the easiest way to run LessonScribe is:
+
+```bash
+make dev
+```
+
+Useful alternatives:
+
+```bash
+make backend
+make frontend
+```
+
+Use the separate targets if you want to run only one service.
+
 ## Backend Setup
 
 The backend runs FastAPI, FFmpeg, and local Whisper transcription.
 
+If you want the shortest day-to-day command after setup, use `make dev` from the repository root instead of starting the backend and frontend manually.
+
 ### macOS
 
 ```bash
-cd /Users/pietrodibello/Documents/workspace/ai/lessonscribe/backend
+cd backend
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -e ".[dev]"
@@ -174,7 +189,7 @@ The frontend is the local web UI.
 ### macOS
 
 ```bash
-cd /Users/pietrodibello/Documents/workspace/ai/lessonscribe/frontend
+cd frontend
 npm install
 npm run dev
 ```
@@ -188,6 +203,8 @@ npm run dev
 ```
 
 The Vite dev server proxies API traffic to `http://localhost:8000`, so the backend should already be running first.
+
+If you use `make dev`, the backend and frontend start together and you can skip the separate startup steps below.
 
 ## Open The App
 
@@ -221,7 +238,7 @@ If the status says `Setup needed`, one of the local dependencies is missing or n
 Backend:
 
 ```bash
-cd /Users/pietrodibello/Documents/workspace/ai/lessonscribe/backend
+cd backend
 source .venv/bin/activate
 PYTHONPATH=. pytest
 ```
@@ -229,7 +246,7 @@ PYTHONPATH=. pytest
 Frontend:
 
 ```bash
-cd /Users/pietrodibello/Documents/workspace/ai/lessonscribe/frontend
+cd frontend
 npm test -- --run
 ```
 
@@ -238,7 +255,6 @@ npm test -- --run
 For a backend-only check, run the smoke test against a generated local sample clip:
 
 ```bash
-cd /Users/pietrodibello/Documents/workspace/ai/lessonscribe
 python3 scripts/smoke_test_small_example.py
 ```
 
@@ -291,4 +307,4 @@ Job state is stored under `data/jobs/`, and app-managed Whisper model markers li
 
 ## Future Roadmap
 
-Planned follow-up features are tracked in [future-features-plan.md](/Users/pietrodibello/Documents/workspace/ai/lessonscribe/docs/future-features-plan.md).
+Planned follow-up features are tracked in [future-features-plan.md](docs/future-features-plan.md).

@@ -103,7 +103,7 @@ The implementation should stay transparent enough that a developer can understan
 
 ## README Changes
 
-Update the run instructions in [README.md](/Users/pietrodibello/Documents/workspace/ai/lessonscribe/README.md) so they:
+Update the run instructions in [README.md](../../../README.md) so they:
 
 - lead with `make dev` as the easiest way to start the app
 - still include the explicit backend and frontend commands as fallback

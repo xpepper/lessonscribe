@@ -233,21 +233,9 @@ cd /Users/pietrodibello/Documents/workspace/ai/lessonscribe/frontend
 npm test -- --run
 ```
 
-## Real Lecture Verification
-
-Use the sample audio already present in the repo root:
-
-- [`Lezione-biologia.m4a`](/Users/pietrodibello/Documents/workspace/ai/lessonscribe/Lezione-biologia.m4a)
-
-Run the backend and frontend, upload that file, choose a model, transcribe it, then verify playback sync and click-to-seek in the browser.
-
 ## Quick Smoke Test
 
-For a faster backend-only check, use the short sample clip:
-
-- [`small-example.m4a`](/Users/pietrodibello/Documents/workspace/ai/lessonscribe/examples/small-example.m4a)
-
-With the backend already running:
+For a backend-only check, run the smoke test against a generated local sample clip:
 
 ```bash
 cd /Users/pietrodibello/Documents/workspace/ai/lessonscribe
@@ -258,11 +246,12 @@ Optional overrides:
 
 ```bash
 python3 scripts/smoke_test_small_example.py --model turbo
+python3 scripts/smoke_test_small_example.py --text "This is a custom generated sample for Whisper."
 python3 scripts/smoke_test_small_example.py --audio /absolute/path/to/clip.m4a
 python3 scripts/smoke_test_small_example.py --base-url http://127.0.0.1:8000
 ```
 
-The script uploads the clip, starts transcription, polls job status, fetches the transcript, and exits non-zero if import/transcription/transcript retrieval fails or if segment/word timestamps are missing.
+The script uploads the generated clip or the clip you pass with `--audio`, starts transcription, polls job status, fetches the transcript, and exits non-zero if import/transcription/transcript retrieval fails or if segment/word timestamps are missing.
 
 ## Troubleshooting
 
@@ -279,7 +268,12 @@ The script uploads the clip, starts transcription, polls job status, fetches the
   - make sure the backend terminal is still running on port `8000`
 - Very slow transcription:
   - use `turbo` for faster tests
-  - use the short clip in [`examples/small-example.m4a`](/Users/pietrodibello/Documents/workspace/ai/lessonscribe/examples/small-example.m4a) for quick smoke checks
+  - use the generated smoke-test clip or pass a short clip with `--audio`
+- generated smoke-test audio not working:
+  - macOS requires `say` and `ffmpeg`
+  - Windows requires PowerShell speech synthesis
+  - Linux requires `espeak`
+  - if local generation is unavailable, pass your own file with `--audio`
 - Poor transcript quality:
   - try `large-v3`
   - make sure the recording is clear and the spoken language matches what Whisper can detect well

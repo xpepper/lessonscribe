@@ -5,19 +5,19 @@ import argparse
 import json
 import mimetypes
 import sys
+import tempfile
 import time
 import urllib.error
 import urllib.parse
 import urllib.request
 from pathlib import Path
 
-
-DEFAULT_AUDIO = Path(__file__).resolve().parents[1] / "examples" / "small-example.m4a"
+from generate_sample_audio import DEFAULT_TEXT, generate_sample_audio
 
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Import and transcribe the short local sample clip against a running LessonScribe backend."
+        description="Import and transcribe a short local clip against a running LessonScribe backend."
     )
     parser.add_argument(
         "--base-url",
@@ -26,8 +26,8 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--audio",
-        default=str(DEFAULT_AUDIO),
-        help="Audio clip to upload.",
+        default=None,
+        help="Audio clip to upload. If omitted, generate a temporary sample clip locally.",
     )
     parser.add_argument(
         "--model",
@@ -40,6 +40,11 @@ def parse_args() -> argparse.Namespace:
         type=int,
         default=180,
         help="Maximum time to wait for transcription completion.",
+    )
+    parser.add_argument(
+        "--text",
+        default=DEFAULT_TEXT,
+        help="Spoken text to use when generating a temporary sample clip.",
     )
     return parser.parse_args()
 
@@ -72,11 +77,26 @@ def multipart_form_data(field_name: str, file_path: Path) -> tuple[bytes, str]:
     return b"".join(chunks), boundary
 
 
+def resolve_audio_path(args: argparse.Namespace) -> tuple[Path, tempfile.TemporaryDirectory[str] | None]:
+    if args.audio:
+        audio_path = Path(args.audio).expanduser().resolve()
+        if not audio_path.exists():
+            raise FileNotFoundError(f"Audio file not found: {audio_path}")
+        return audio_path, None
+
+    temp_dir = tempfile.TemporaryDirectory(prefix="lessonscribe-smoke-")
+    audio_path = Path(temp_dir.name) / "generated-smoke-test.wav"
+    generate_sample_audio(audio_path, args.text)
+    return audio_path, temp_dir
+
+
 def main() -> int:
     args = parse_args()
-    audio_path = Path(args.audio).expanduser().resolve()
-    if not audio_path.exists():
-        print(f"Audio file not found: {audio_path}", file=sys.stderr)
+    temporary_audio_dir: tempfile.TemporaryDirectory[str] | None = None
+    try:
+        audio_path, temporary_audio_dir = resolve_audio_path(args)
+    except (FileNotFoundError, RuntimeError) as exc:
+        print(str(exc), file=sys.stderr)
         return 1
 
     base_url = args.base_url.rstrip("/")
@@ -148,8 +168,10 @@ def main() -> int:
     except urllib.error.URLError as exc:
         print(f"Unable to reach backend: {exc.reason}", file=sys.stderr)
         return 1
+    finally:
+        if temporary_audio_dir is not None:
+            temporary_audio_dir.cleanup()
 
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

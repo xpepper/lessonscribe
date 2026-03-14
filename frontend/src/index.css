@@ -123,7 +123,7 @@ button {
 
 .toolbar {
   display: grid;
-  grid-template-columns: 180px minmax(0, 1fr) 220px 150px;
+  grid-template-columns: 180px minmax(0, 1fr) minmax(250px, 290px) minmax(170px, 190px);
   gap: 14px;
   align-items: center;
   padding: 14px;
@@ -195,8 +195,10 @@ button {
 }
 
 .model-select {
-  justify-content: space-between;
-  gap: 12px;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 14px;
 }
 
 .model-select span {
@@ -209,6 +211,8 @@ button {
   border: 0;
   background: transparent;
   color: var(--ink);
+  min-width: 0;
+  width: 100%;
 }
 
 .workspace {

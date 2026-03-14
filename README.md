@@ -277,3 +277,7 @@ Each imported lecture is stored under `data/lectures/<lecture-id>/` with:
 - `metadata.json`
 
 Job state is stored under `data/jobs/`, and app-managed Whisper model markers live under `data/models/`.
+
+## Future Roadmap
+
+Planned follow-up features are tracked in [future-features-plan.md](/Users/pietrodibello/Documents/workspace/ai/lessonscribe/docs/future-features-plan.md).

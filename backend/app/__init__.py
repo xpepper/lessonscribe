@@ -1,0 +1,2 @@
+"""LessonScribe backend package."""
+

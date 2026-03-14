@@ -1,0 +1,8 @@
+fastapi
+openai-whisper
+python-multipart
+uvicorn[standard]
+
+[dev]
+httpx
+pytest

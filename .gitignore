@@ -1,0 +1,13 @@
+.DS_Store
+.superpowers/
+data/
+
+backend/.pytest_cache/
+backend/.venv/
+backend/**/*.pyc
+backend/**/__pycache__/
+
+frontend/coverage/
+frontend/dist/
+frontend/node_modules/
+

@@ -1,0 +1,15 @@
+pyproject.toml
+app/__init__.py
+app/audio.py
+app/config.py
+app/jobs.py
+app/main.py
+app/schemas.py
+app/storage.py
+app/transcription.py
+lessonscribe_backend.egg-info/PKG-INFO
+lessonscribe_backend.egg-info/SOURCES.txt
+lessonscribe_backend.egg-info/dependency_links.txt
+lessonscribe_backend.egg-info/requires.txt
+lessonscribe_backend.egg-info/top_level.txt
+tests/test_api.py

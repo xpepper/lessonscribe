@@ -4,10 +4,10 @@ data/
 
 backend/.pytest_cache/
 backend/.venv/
+backend/*.egg-info/
 backend/**/*.pyc
 backend/**/__pycache__/
 
 frontend/coverage/
 frontend/dist/
 frontend/node_modules/
-

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import importlib
 from pathlib import Path
 from typing import Any
 
@@ -49,6 +50,22 @@ class WhisperService:
             return "mps"
         return "cpu"
 
+    def _patch_mps_dtw(self) -> None:
+        timing = importlib.import_module("whisper.timing")
+        if getattr(timing, "_lessonscribe_mps_patch", False):
+            return
+
+        original_dtw = timing.dtw
+
+        def patched_dtw(x):
+            device = getattr(getattr(x, "device", None), "type", None)
+            if device == "mps":
+                return timing.dtw_cpu(x.cpu().double().numpy())
+            return original_dtw(x)
+
+        timing.dtw = patched_dtw
+        timing._lessonscribe_mps_patch = True
+
     def preflight(self) -> dict[str, bool | str]:
         return {
             "whisper_installed": self.whisper_installed(),
@@ -79,7 +96,11 @@ class WhisperService:
         if whisper is None:
             raise RuntimeError("Whisper is not installed. Install backend dependencies first.")
 
-        whisper.load_model(model_name, download_root=str(self.settings.models_dir), device=self.device())
+        device = self.device()
+        if device == "mps":
+            self._patch_mps_dtw()
+
+        whisper.load_model(model_name, download_root=str(self.settings.models_dir), device=device)
         self._model_marker(model_name).write_text("ready\n")
 
     def transcribe(self, audio_path: Path, model_name: str) -> TranscriptPayload:
@@ -89,6 +110,9 @@ class WhisperService:
             raise RuntimeError("Whisper is not installed. Install backend dependencies first.")
 
         device = self.device()
+        if device == "mps":
+            self._patch_mps_dtw()
+
         model = whisper.load_model(model_name, download_root=str(self.settings.models_dir), device=device)
         result = model.transcribe(
             str(audio_path),

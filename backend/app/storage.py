@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import shutil
+import tempfile
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
@@ -44,6 +45,18 @@ class LectureStore:
 
     def source_audio_path(self, lecture_id: str, extension: str) -> Path:
         return self.lecture_dir(lecture_id) / f"source{extension}"
+
+    def _write_json_file(self, path: Path, payload: str) -> None:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with tempfile.NamedTemporaryFile(
+            "w",
+            encoding="utf-8",
+            dir=path.parent,
+            delete=False,
+        ) as handle:
+            handle.write(payload)
+            temp_path = Path(handle.name)
+        temp_path.replace(path)
 
     def create_lecture(self, source_path: Path, original_filename: str) -> LectureMetadata:
         extension = source_path.suffix.lower()
@@ -99,7 +112,7 @@ class LectureStore:
 
     def write_metadata(self, metadata: LectureMetadata) -> LectureMetadata:
         payload = metadata.model_copy(update={"updated_at": utc_now()})
-        self.metadata_path(payload.id).write_text(payload.model_dump_json(indent=2))
+        self._write_json_file(self.metadata_path(payload.id), payload.model_dump_json(indent=2))
         return payload
 
     def update_metadata(self, lecture_id: str, **updates: object) -> LectureMetadata:
@@ -109,7 +122,7 @@ class LectureStore:
 
     def write_job(self, job: JobRecord) -> JobRecord:
         payload = job.model_copy(update={"updated_at": utc_now()})
-        self.jobs_path(payload.id).write_text(payload.model_dump_json(indent=2))
+        self._write_json_file(self.jobs_path(payload.id), payload.model_dump_json(indent=2))
         return payload
 
     def read_job(self, job_id: str) -> JobRecord:
@@ -119,7 +132,7 @@ class LectureStore:
         return JobRecord.model_validate_json(path.read_text())
 
     def write_transcript(self, lecture_id: str, transcript: TranscriptPayload) -> TranscriptPayload:
-        self.transcript_path(lecture_id).write_text(transcript.model_dump_json(indent=2))
+        self._write_json_file(self.transcript_path(lecture_id), transcript.model_dump_json(indent=2))
         return transcript
 
     def read_transcript(self, lecture_id: str) -> TranscriptPayload:

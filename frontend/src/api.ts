@@ -31,6 +31,21 @@ async function parseResponse<T>(response: Response): Promise<T> {
   return (await response.json()) as T
 }
 
+async function expectOk(response: Response): Promise<void> {
+  if (!response.ok) {
+    let message = 'Request failed.'
+    try {
+      const payload = (await response.json()) as { detail?: string }
+      if (payload.detail) {
+        message = payload.detail
+      }
+    } catch {
+      message = response.statusText || message
+    }
+    throw new Error(message)
+  }
+}
+
 export function resolveAssetUrl(path: string | null): string | null {
   if (!path) {
     return null
@@ -74,6 +89,15 @@ export async function fetchLectures(): Promise<LectureMetadata[]> {
 
 export async function fetchLecture(lectureId: string): Promise<LectureMetadata> {
   return parseResponse<LectureMetadata>(await fetch(apiUrl(`/lectures/${lectureId}`)))
+}
+
+export async function deleteLecture(lectureId: string, options?: { force?: boolean }): Promise<void> {
+  const path = options?.force ? `/lectures/${lectureId}?force=true` : `/lectures/${lectureId}`
+  await expectOk(
+    await fetch(apiUrl(path), {
+      method: 'DELETE',
+    }),
+  )
 }
 
 export async function startTranscription(

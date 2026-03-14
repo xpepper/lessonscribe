@@ -5,7 +5,7 @@ import shutil
 import tempfile
 from pathlib import Path
 
-from fastapi import FastAPI, File, HTTPException, UploadFile
+from fastapi import FastAPI, File, HTTPException, Response, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 
@@ -109,6 +109,36 @@ def create_app(
             return store.read_metadata(lecture_id)
         except FileNotFoundError as exc:
             raise HTTPException(status_code=404, detail="Lecture not found.") from exc
+
+    @app.delete("/lectures/{lecture_id}", status_code=204)
+    def delete_lecture(lecture_id: str, force: bool = False) -> Response:
+        try:
+            metadata = store.read_metadata(lecture_id)
+        except FileNotFoundError as exc:
+            raise HTTPException(status_code=404, detail="Lecture not found.") from exc
+
+        if metadata.active_job_id:
+            try:
+                job = job_manager.get_job(metadata.active_job_id)
+            except FileNotFoundError:
+                job = None
+
+            if job is not None and job.status not in {"complete", "failed", "canceled"}:
+                if not force:
+                    raise HTTPException(
+                        status_code=409,
+                        detail="Lecture cannot be deleted while transcription is running.",
+                    )
+                try:
+                    job_manager.cancel_job(metadata.active_job_id)
+                except FileNotFoundError:
+                    pass
+
+        try:
+            store.delete_lecture(lecture_id)
+        except FileNotFoundError as exc:
+            raise HTTPException(status_code=404, detail="Lecture not found.") from exc
+        return Response(status_code=204)
 
     @app.post("/lectures/{lecture_id}/transcribe", response_model=JobRecord)
     async def transcribe_lecture(lecture_id: str, payload: TranscribeLectureRequest) -> JobRecord:

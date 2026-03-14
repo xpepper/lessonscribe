@@ -3,6 +3,7 @@ export type JobState =
   | 'preparing'
   | 'downloading-model'
   | 'transcribing'
+  | 'canceled'
   | 'complete'
   | 'failed'
 

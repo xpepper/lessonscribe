@@ -5,6 +5,7 @@ import App from './App'
 import type { HealthCheck, LectureMetadata, ModelInfo } from './types'
 
 const apiMocks = vi.hoisted(() => ({
+  deleteLecture: vi.fn(),
   downloadModel: vi.fn(),
   fetchHealth: vi.fn(),
   fetchJob: vi.fn(),
@@ -69,6 +70,7 @@ describe('App', () => {
       segments: [],
       words: [],
     })
+    apiMocks.deleteLecture.mockResolvedValue(undefined)
     apiMocks.resolveAssetUrl.mockImplementation((path: string | null) => path)
     apiMocks.fetchJob.mockResolvedValue(null)
   })
@@ -95,7 +97,7 @@ describe('App', () => {
 
     render(<App />)
 
-    const biologyButton = await screen.findByRole('button', { name: /Biology Lecture/i })
+    const biologyButton = await screen.findByRole('button', { name: /^Biology Lecture$/i })
     await waitFor(() => expect(biologyButton).toHaveAttribute('aria-pressed', 'true'))
     expect(apiMocks.fetchLecture).toHaveBeenCalledWith(biology.id)
   })
@@ -121,11 +123,11 @@ describe('App', () => {
 
     render(<App />)
 
-    const biologyButton = await screen.findByRole('button', { name: /Biology Lecture/i })
+    const biologyButton = await screen.findByRole('button', { name: /^Biology Lecture$/i })
     await waitFor(() => expect(biologyButton).toHaveAttribute('aria-pressed', 'true'))
 
     const user = userEvent.setup()
-    const historyButton = screen.getByRole('button', { name: /Roman History/i })
+    const historyButton = screen.getByRole('button', { name: /^Roman History$/i })
     await user.click(historyButton)
 
     await waitFor(() => expect(historyButton).toHaveAttribute('aria-pressed', 'true'))
@@ -154,7 +156,7 @@ describe('App', () => {
 
     render(<App />)
 
-    const existingButton = await screen.findByRole('button', { name: /Existing Lecture/i })
+    const existingButton = await screen.findByRole('button', { name: /^Existing Lecture$/i })
     await waitFor(() => expect(existingButton).toHaveAttribute('aria-pressed', 'true'))
 
     const user = userEvent.setup()
@@ -164,7 +166,129 @@ describe('App', () => {
     await waitFor(() => expect(apiMocks.importLecture).toHaveBeenCalledTimes(1))
     await waitFor(() => expect(apiMocks.fetchLectures).toHaveBeenCalledTimes(2))
 
-    const newLectureButton = await screen.findByRole('button', { name: /New Lecture/i })
+    const newLectureButton = await screen.findByRole('button', { name: /^New Lecture$/i })
     expect(newLectureButton).toHaveAttribute('aria-pressed', 'true')
+  })
+
+  it('deletes a non-active lecture from the sidebar after confirmation', async () => {
+    const biology = makeLecture({
+      id: 'lecture-biology',
+      title: 'Biology Lecture',
+      original_filename: 'biology.wav',
+      created_at: '2026-03-14T09:00:00+00:00',
+    })
+    const history = makeLecture({
+      id: 'lecture-history',
+      title: 'Roman History',
+      original_filename: 'history.wav',
+      created_at: '2026-03-13T09:00:00+00:00',
+    })
+
+    apiMocks.fetchLectures.mockResolvedValue([biology, history])
+    apiMocks.fetchLecture.mockImplementation(async (lectureId: string) =>
+      lectureId === biology.id ? biology : history,
+    )
+
+    render(<App />)
+
+    await screen.findByRole('button', { name: /^Biology Lecture$/i })
+
+    const user = userEvent.setup()
+    await user.click(screen.getByRole('button', { name: /More actions for Roman History/i }))
+    await user.click(screen.getByRole('menuitem', { name: /Delete lecture/i }))
+    await user.click(screen.getByRole('button', { name: /Delete permanently/i }))
+
+    await waitFor(() => expect(apiMocks.deleteLecture).toHaveBeenCalledWith(history.id, { force: false }))
+    await waitFor(() =>
+      expect(screen.queryByRole('button', { name: /^Roman History$/i })).not.toBeInTheDocument(),
+    )
+    expect(screen.getByRole('button', { name: /^Biology Lecture$/i })).toBeInTheDocument()
+  })
+
+  it('clears the workspace when the active lecture is deleted', async () => {
+    const biology = makeLecture({
+      id: 'lecture-biology',
+      title: 'Biology Lecture',
+      original_filename: 'biology.wav',
+      created_at: '2026-03-14T09:00:00+00:00',
+    })
+
+    apiMocks.fetchLectures.mockResolvedValue([biology])
+    apiMocks.fetchLecture.mockResolvedValue(biology)
+    window.localStorage.setItem(CURRENT_LECTURE_KEY, biology.id)
+
+    render(<App />)
+
+    await screen.findByRole('button', { name: /^Biology Lecture$/i })
+
+    const user = userEvent.setup()
+    await user.click(screen.getByRole('button', { name: /More actions for Biology Lecture/i }))
+    await user.click(screen.getByRole('menuitem', { name: /Delete lecture/i }))
+    await user.click(screen.getByRole('button', { name: /Delete permanently/i }))
+
+    await waitFor(() => expect(apiMocks.deleteLecture).toHaveBeenCalledWith(biology.id, { force: false }))
+    await waitFor(() => expect(screen.getByText(/Waiting for audio/i)).toBeInTheDocument())
+    expect(screen.getByText(/No lecture imported yet/i)).toBeInTheDocument()
+    expect(window.localStorage.getItem(CURRENT_LECTURE_KEY)).toBeNull()
+  })
+
+  it('keeps the lecture visible and shows an error when deletion fails', async () => {
+    const biology = makeLecture({
+      id: 'lecture-biology',
+      title: 'Biology Lecture',
+      original_filename: 'biology.wav',
+      created_at: '2026-03-14T09:00:00+00:00',
+      status: 'complete',
+      has_transcript: true,
+    })
+
+    apiMocks.fetchLectures.mockResolvedValue([biology])
+    apiMocks.fetchLecture.mockResolvedValue(biology)
+    apiMocks.deleteLecture.mockRejectedValue(new Error('Lecture cannot be deleted while transcription is running.'))
+
+    render(<App />)
+
+    await screen.findByRole('button', { name: /^Biology Lecture$/i })
+
+    const user = userEvent.setup()
+    await user.click(screen.getByRole('button', { name: /More actions for Biology Lecture/i }))
+    await user.click(screen.getByRole('menuitem', { name: /Delete lecture/i }))
+    await user.click(screen.getByRole('button', { name: /Delete permanently/i }))
+
+    await waitFor(() =>
+      expect(screen.getByText(/Lecture cannot be deleted while transcription is running\./i)).toBeInTheDocument(),
+    )
+    expect(screen.getByRole('button', { name: /^Biology Lecture$/i })).toBeInTheDocument()
+  })
+
+  it('force-deletes a running lecture after the stronger confirmation', async () => {
+    const biology = makeLecture({
+      id: 'lecture-biology',
+      title: 'Biology Lecture',
+      original_filename: 'biology.wav',
+      created_at: '2026-03-14T09:00:00+00:00',
+      status: 'transcribing',
+      active_job_id: 'job-123',
+    })
+
+    apiMocks.fetchLectures.mockResolvedValue([biology])
+    apiMocks.fetchLecture.mockResolvedValue(biology)
+
+    render(<App />)
+
+    await screen.findByRole('button', { name: /^Biology Lecture$/i })
+
+    const user = userEvent.setup()
+    await user.click(screen.getByRole('button', { name: /More actions for Biology Lecture/i }))
+    expect(screen.getByText(/Deletion will attempt cancellation first\./i)).toBeInTheDocument()
+
+    await user.click(screen.getByRole('menuitem', { name: /Delete lecture/i }))
+    expect(
+      screen.getByText(/LessonScribe will first try to cancel the job, then remove the lecture/i),
+    ).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: /Cancel and delete/i }))
+
+    await waitFor(() => expect(apiMocks.deleteLecture).toHaveBeenCalledWith(biology.id, { force: true }))
+    await waitFor(() => expect(screen.getByText(/Waiting for audio/i)).toBeInTheDocument())
   })
 })

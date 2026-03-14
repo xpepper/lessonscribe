@@ -10,6 +10,7 @@ JobState = Literal[
     "preparing",
     "downloading-model",
     "transcribing",
+    "canceled",
     "complete",
     "failed",
 ]

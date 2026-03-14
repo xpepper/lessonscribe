@@ -110,6 +110,12 @@ class LectureStore:
 
         return sorted(lectures, key=lambda lecture: lecture.created_at, reverse=True)
 
+    def delete_lecture(self, lecture_id: str) -> None:
+        lecture_dir = self.lecture_dir(lecture_id)
+        if not lecture_dir.is_dir():
+            raise FileNotFoundError(lecture_id)
+        shutil.rmtree(lecture_dir)
+
     def write_metadata(self, metadata: LectureMetadata) -> LectureMetadata:
         payload = metadata.model_copy(update={"updated_at": utc_now()})
         self._write_json_file(self.metadata_path(payload.id), payload.model_dump_json(indent=2))

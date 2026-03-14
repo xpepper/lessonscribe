@@ -1,14 +1,16 @@
 from __future__ import annotations
 
+import threading
 import time
 import wave
 from pathlib import Path
 
 from fastapi.testclient import TestClient
 
+import app.jobs as jobs_module
 from app.config import Settings
 from app.main import create_app
-from app.schemas import TranscriptPayload
+from app.schemas import JobRecord, TranscriptPayload
 from app.transcription import WhisperService
 
 
@@ -60,6 +62,18 @@ class FakeWhisperService(WhisperService):
                 ],
             }
         )
+
+
+class BlockingWhisperService(FakeWhisperService):
+    def __init__(self, settings: Settings, started: threading.Event, release: threading.Event) -> None:
+        super().__init__(settings)
+        self.started = started
+        self.release = release
+
+    def transcribe(self, audio_path: Path, model_name: str):
+        self.started.set()
+        self.release.wait(timeout=5)
+        return super().transcribe(audio_path, model_name)
 
 
 def write_test_wav(path: Path) -> None:
@@ -144,6 +158,153 @@ def test_list_lectures_returns_newest_first(tmp_path: Path) -> None:
     payload = response.json()
     assert [lecture["original_filename"] for lecture in payload] == ["second.wav", "first.wav"]
     assert all(lecture["has_transcript"] is False for lecture in payload)
+
+
+def test_delete_lecture_removes_it_from_storage_and_library(tmp_path: Path) -> None:
+    client = make_client(tmp_path)
+    audio_path = tmp_path / "sample.wav"
+    write_test_wav(audio_path)
+
+    with audio_path.open("rb") as handle:
+        import_response = client.post(
+            "/lectures/import",
+            files={"file": ("sample.wav", handle, "audio/wav")},
+        )
+
+    assert import_response.status_code == 200
+    lecture = import_response.json()
+    lecture_path = tmp_path / "data" / "lectures" / lecture["id"]
+    assert lecture_path.exists()
+
+    delete_response = client.delete(f"/lectures/{lecture['id']}")
+
+    assert delete_response.status_code == 204
+    assert not lecture_path.exists()
+    assert client.get("/lectures").json() == []
+
+
+def test_delete_lecture_returns_404_for_unknown_id(tmp_path: Path) -> None:
+    client = make_client(tmp_path)
+
+    response = client.delete("/lectures/missing-lecture")
+
+    assert response.status_code == 404
+
+
+def test_delete_lecture_returns_409_when_transcription_is_running(tmp_path: Path) -> None:
+    client = make_client(tmp_path)
+    audio_path = tmp_path / "sample.wav"
+    write_test_wav(audio_path)
+
+    with audio_path.open("rb") as handle:
+        import_response = client.post(
+            "/lectures/import",
+            files={"file": ("sample.wav", handle, "audio/wav")},
+        )
+
+    assert import_response.status_code == 200
+    lecture = import_response.json()
+    store = client.app.state.store
+    running_job = JobRecord(
+        id="job-running",
+        lecture_id=lecture["id"],
+        model="turbo",
+        status="transcribing",
+        progress=50,
+        message="Transcribing lecture with Whisper.",
+        error=None,
+        created_at="2026-03-14T09:00:00+00:00",
+        updated_at="2026-03-14T09:00:00+00:00",
+    )
+    store.write_job(running_job)
+    store.update_metadata(lecture["id"], active_job_id=running_job.id, status="transcribing")
+
+    response = client.delete(f"/lectures/{lecture['id']}")
+
+    assert response.status_code == 409
+    assert response.json()["detail"] == "Lecture cannot be deleted while transcription is running."
+    assert (tmp_path / "data" / "lectures" / lecture["id"]).exists()
+
+
+def test_force_delete_running_lecture_cancels_job_and_removes_storage(tmp_path: Path) -> None:
+    client = make_client(tmp_path)
+    audio_path = tmp_path / "sample.wav"
+    write_test_wav(audio_path)
+
+    with audio_path.open("rb") as handle:
+        import_response = client.post(
+            "/lectures/import",
+            files={"file": ("sample.wav", handle, "audio/wav")},
+        )
+
+    assert import_response.status_code == 200
+    lecture = import_response.json()
+    store = client.app.state.store
+    running_job = JobRecord(
+        id="job-running",
+        lecture_id=lecture["id"],
+        model="turbo",
+        status="transcribing",
+        progress=50,
+        message="Transcribing lecture with Whisper.",
+        error=None,
+        created_at="2026-03-14T09:00:00+00:00",
+        updated_at="2026-03-14T09:00:00+00:00",
+    )
+    store.write_job(running_job)
+    store.update_metadata(lecture["id"], active_job_id=running_job.id, status="transcribing")
+
+    response = client.delete(f"/lectures/{lecture['id']}?force=true")
+
+    assert response.status_code == 204
+    assert client.get(f"/jobs/{running_job.id}").json()["status"] == "canceled"
+    assert not (tmp_path / "data" / "lectures" / lecture["id"]).exists()
+
+
+def test_force_delete_running_thread_does_not_recreate_deleted_lecture(tmp_path: Path, monkeypatch) -> None:
+    started = threading.Event()
+    release = threading.Event()
+    settings = Settings(data_dir=tmp_path / "data")
+    app = create_app(settings, transcriber=BlockingWhisperService(settings, started, release))
+    client = TestClient(app)
+    monkeypatch.setattr(jobs_module, "normalize_audio", lambda source, destination: destination.write_bytes(b"wav"))
+
+    audio_path = tmp_path / "sample.wav"
+    write_test_wav(audio_path)
+
+    with audio_path.open("rb") as handle:
+        import_response = client.post(
+            "/lectures/import",
+            files={"file": ("sample.wav", handle, "audio/wav")},
+        )
+
+    assert import_response.status_code == 200
+    lecture = import_response.json()
+    lecture_path = tmp_path / "data" / "lectures" / lecture["id"]
+
+    job_response = client.post(
+        f"/lectures/{lecture['id']}/transcribe",
+        json={"model": "turbo"},
+    )
+    assert job_response.status_code == 200
+    job_id = job_response.json()["id"]
+    assert started.wait(timeout=2)
+
+    delete_response = client.delete(f"/lectures/{lecture['id']}?force=true")
+    assert delete_response.status_code == 204
+    assert not lecture_path.exists()
+    assert client.get(f"/jobs/{job_id}").json()["status"] == "canceled"
+
+    release.set()
+
+    for _ in range(40):
+        if not lecture_path.exists():
+            break
+        time.sleep(0.05)
+
+    assert not lecture_path.exists()
+    assert client.get(f"/lectures/{lecture['id']}").status_code == 404
+    assert client.get(f"/jobs/{job_id}").json()["status"] == "canceled"
 
 
 def test_happy_path_import_transcribe_and_fetch_transcript(tmp_path: Path) -> None:

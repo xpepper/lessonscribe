@@ -1,6 +1,7 @@
 import { useEffect, useEffectEvent, useRef, useState } from 'react'
 import './index.css'
 import {
+  deleteLecture,
   downloadModel,
   fetchHealth,
   fetchJob,
@@ -30,9 +31,14 @@ import type {
 } from './types'
 
 const CURRENT_LECTURE_KEY = 'lessonscribe.currentLectureId'
+const ACTIVE_TRANSCRIPTION_STATUSES = new Set(['preparing', 'downloading-model', 'transcribing'])
 
 function sortLectures(items: LectureMetadata[]): LectureMetadata[] {
   return [...items].sort((left, right) => right.created_at.localeCompare(left.created_at))
+}
+
+function lectureIsRunning(lecture: LectureMetadata): boolean {
+  return lecture.active_job_id !== null && ACTIVE_TRANSCRIPTION_STATUSES.has(lecture.status)
 }
 
 function App() {
@@ -54,6 +60,10 @@ function App() {
   const [libraryErrorMessage, setLibraryErrorMessage] = useState<string | null>(null)
   const [isLibraryLoading, setIsLibraryLoading] = useState(true)
   const [isImporting, setIsImporting] = useState(false)
+  const [openLectureActionsId, setOpenLectureActionsId] = useState<string | null>(null)
+  const [pendingDeletionLecture, setPendingDeletionLecture] = useState<LectureMetadata | null>(null)
+  const [isDeletingLecture, setIsDeletingLecture] = useState(false)
+  const [deleteErrorMessage, setDeleteErrorMessage] = useState<string | null>(null)
 
   const audioRef = useRef<HTMLAudioElement>(null)
   const transcriptContainerRef = useRef<HTMLDivElement>(null)
@@ -134,7 +144,7 @@ function App() {
   }, [])
 
   useEffect(() => {
-    if (!job || job.status === 'complete' || job.status === 'failed') {
+    if (!job || job.status === 'complete' || job.status === 'failed' || job.status === 'canceled') {
       return
     }
 
@@ -144,11 +154,17 @@ function App() {
           setJob(nextJob)
           setBusyMessage(nextJob.message)
           syncLectureState(nextJob.lecture_id, {
-            active_job_id: nextJob.status === 'complete' || nextJob.status === 'failed' ? null : nextJob.id,
+            active_job_id:
+              nextJob.status === 'complete' || nextJob.status === 'failed' || nextJob.status === 'canceled'
+                ? null
+                : nextJob.id,
             status: nextJob.status,
           })
           if (nextJob.status === 'complete') {
             void hydrateLecture(nextJob.lecture_id)
+            setBusyMessage(null)
+          }
+          if (nextJob.status === 'canceled') {
             setBusyMessage(null)
           }
           if (nextJob.status === 'failed') {
@@ -238,8 +254,25 @@ function App() {
     audio.volume = volume
   }, [volume])
 
+  function clearActiveLectureWorkspace(lectureId: string) {
+    setLecture(null)
+    setTranscript(null)
+    setSegmentViews([])
+    setCurrentTime(0)
+    setDuration(0)
+    setIsPlaying(false)
+    setBusyMessage(null)
+    setErrorMessage(null)
+    setJob((current) => (current?.lecture_id === lectureId ? null : current))
+    window.localStorage.removeItem(CURRENT_LECTURE_KEY)
+  }
+
   function mergeLectureIntoList(nextLecture: LectureMetadata) {
     setLectures((current) => sortLectures([nextLecture, ...current.filter((item) => item.id !== nextLecture.id)]))
+  }
+
+  function removeLectureFromList(lectureId: string) {
+    setLectures((current) => current.filter((item) => item.id !== lectureId))
   }
 
   function syncLectureState(lectureId: string, updates: Partial<LectureMetadata>) {
@@ -267,6 +300,7 @@ function App() {
   async function hydrateLecture(lectureId: string) {
     try {
       setErrorMessage(null)
+      setOpenLectureActionsId(null)
       const nextLecture = await fetchLecture(lectureId)
       setLecture(nextLecture)
       mergeLectureIntoList(nextLecture)
@@ -294,6 +328,7 @@ function App() {
 
     setIsImporting(true)
     setErrorMessage(null)
+    setOpenLectureActionsId(null)
     setBusyMessage('Importing lecture audio...')
     try {
       const imported = await importLecture(file)
@@ -311,6 +346,32 @@ function App() {
       setBusyMessage(null)
     } finally {
       setIsImporting(false)
+    }
+  }
+
+  async function handleDeleteLecture() {
+    if (!pendingDeletionLecture) {
+      return
+    }
+
+    setIsDeletingLecture(true)
+    setDeleteErrorMessage(null)
+
+    try {
+      const forceDelete = lectureIsRunning(pendingDeletionLecture)
+      await deleteLecture(pendingDeletionLecture.id, { force: forceDelete })
+      removeLectureFromList(pendingDeletionLecture.id)
+      setJob((current) => (current?.lecture_id === pendingDeletionLecture.id ? null : current))
+      if (pendingDeletionLecture.id === lecture?.id) {
+        clearActiveLectureWorkspace(pendingDeletionLecture.id)
+      }
+      setPendingDeletionLecture(null)
+      setOpenLectureActionsId(null)
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unable to delete the lecture.'
+      setDeleteErrorMessage(message)
+    } finally {
+      setIsDeletingLecture(false)
     }
   }
 
@@ -446,25 +507,67 @@ function App() {
               <div className="library-list" aria-label="Saved lectures">
                 {lectures.map((item) => {
                   const isActive = item.id === lecture?.id
+                  const isActionMenuOpen = openLectureActionsId === item.id
                   const language = item.detected_language ?? 'pending'
                   const model = item.selected_model ?? 'not started'
                   return (
-                    <button
+                    <div
                       key={item.id}
-                      type="button"
                       className={`library-item${isActive ? ' library-item--active' : ''}`}
-                      aria-pressed={isActive}
-                      onClick={() => void hydrateLecture(item.id)}
                     >
-                      <span className="library-item__title">{item.title}</span>
-                      <span className="library-item__meta">{item.original_filename}</span>
-                      <span className="library-item__meta">
-                        {formatDuration(item.duration_seconds)} · {language} · {item.status}
-                      </span>
-                      <span className="library-item__meta">
-                        Imported {formatRelativeDate(item.created_at)} · {model}
-                      </span>
-                    </button>
+                      <button
+                        type="button"
+                        className="library-item__select"
+                        aria-label={item.title}
+                        aria-pressed={isActive}
+                        onClick={() => void hydrateLecture(item.id)}
+                      >
+                        <span className="library-item__title">{item.title}</span>
+                        <span className="library-item__meta">{item.original_filename}</span>
+                        <span className="library-item__meta">
+                          {formatDuration(item.duration_seconds)} · {language} · {item.status}
+                        </span>
+                        <span className="library-item__meta">
+                          Imported {formatRelativeDate(item.created_at)} · {model}
+                        </span>
+                      </button>
+
+                      <div className="library-item__actions">
+                        <button
+                          type="button"
+                          className="library-action-button"
+                          aria-label={`More actions for ${item.title}`}
+                          aria-expanded={isActionMenuOpen}
+                          onClick={() =>
+                            setOpenLectureActionsId((current) => (current === item.id ? null : item.id))
+                          }
+                        >
+                          •••
+                        </button>
+
+                        {isActionMenuOpen ? (
+                          <div className="library-action-menu" role="menu" aria-label={`Actions for ${item.title}`}>
+                            <button
+                              type="button"
+                              role="menuitem"
+                              className="library-action-menu__item library-action-menu__item--danger"
+                              onClick={() => {
+                                setPendingDeletionLecture(item)
+                                setDeleteErrorMessage(null)
+                                setOpenLectureActionsId(null)
+                              }}
+                            >
+                              Delete lecture
+                            </button>
+                            {lectureIsRunning(item) ? (
+                              <p className="library-action-menu__hint">
+                                This lecture is still transcribing. Deletion will attempt cancellation first.
+                              </p>
+                            ) : null}
+                          </div>
+                        ) : null}
+                      </div>
+                    </div>
                   )
                 })}
               </div>
@@ -598,6 +701,62 @@ function App() {
           />
         </label>
       </footer>
+
+      {pendingDeletionLecture ? (
+        <div
+          className="modal-overlay"
+          role="presentation"
+          onClick={() => {
+            if (isDeletingLecture) {
+              return
+            }
+            setPendingDeletionLecture(null)
+            setDeleteErrorMessage(null)
+          }}
+        >
+          <div
+            className="modal-card"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="delete-lecture-title"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <p className="sidebar-label">Delete lecture</p>
+            <h2 id="delete-lecture-title">{pendingDeletionLecture.title}</h2>
+            <p className="modal-copy">
+              {lectureIsRunning(pendingDeletionLecture)
+                ? 'This lecture is still transcribing. LessonScribe will first try to cancel the job, then remove the lecture and its local artifacts even if cancellation is not perfectly clean.'
+                : 'This removes the saved lecture, its uploaded audio, and any transcript artifacts from local storage.'}
+            </p>
+            {deleteErrorMessage ? <p className="error-text modal-error">{deleteErrorMessage}</p> : null}
+            <div className="modal-actions">
+              <button
+                type="button"
+                className="secondary-button"
+                disabled={isDeletingLecture}
+                onClick={() => {
+                  setPendingDeletionLecture(null)
+                  setDeleteErrorMessage(null)
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="primary-button danger-button"
+                disabled={isDeletingLecture}
+                onClick={() => void handleDeleteLecture()}
+              >
+                {isDeletingLecture
+                  ? 'Deleting…'
+                  : lectureIsRunning(pendingDeletionLecture)
+                    ? 'Cancel and delete'
+                    : 'Delete permanently'}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   )
 }

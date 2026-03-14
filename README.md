@@ -87,6 +87,29 @@ Use the sample audio already present in the repo root:
 
 Run the backend and frontend, upload that file, choose a model, transcribe it, then verify playback sync and click-to-seek in the browser.
 
+## Quick Smoke Test
+
+For a faster backend-only check, use the short sample clip:
+
+- [`small-example.m4a`](/Users/pietrodibello/Documents/workspace/ai/lessonscribe/examples/small-example.m4a)
+
+With the backend already running:
+
+```bash
+cd /Users/pietrodibello/Documents/workspace/ai/lessonscribe
+python3 scripts/smoke_test_small_example.py
+```
+
+Optional overrides:
+
+```bash
+python3 scripts/smoke_test_small_example.py --model turbo
+python3 scripts/smoke_test_small_example.py --audio /absolute/path/to/clip.m4a
+python3 scripts/smoke_test_small_example.py --base-url http://127.0.0.1:8000
+```
+
+The script uploads the clip, starts transcription, polls job status, fetches the transcript, and exits non-zero if import/transcription/transcript retrieval fails or if segment/word timestamps are missing.
+
 ## Data Layout
 
 Each imported lecture is stored under `data/lectures/<lecture-id>/` with:
@@ -97,4 +120,3 @@ Each imported lecture is stored under `data/lectures/<lecture-id>/` with:
 - `metadata.json`
 
 Job state is stored under `data/jobs/`, and app-managed Whisper model markers live under `data/models/`.
-

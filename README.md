@@ -14,6 +14,10 @@ This repository contains source code, not a packaged installer yet. To use the a
 
 - Upload `mp3`, `m4a`, or `wav` lecture recordings
 - Run Whisper locally with selectable models: `turbo`, `base`, `large-v3`
+- Automatically use hardware acceleration when PyTorch exposes it:
+  - `cuda` for NVIDIA GPUs
+  - `mps` for Apple Silicon
+  - `cpu` otherwise
 - Persist imported audio and transcript artifacts locally
 - Display segment and word timestamps
 - Highlight the active segment and current word during playback
@@ -144,6 +148,8 @@ uvicorn app.main:app --reload --port 8000
 cd C:\path\to\lessonscribe\backend
 py -m venv .venv
 .venv\Scripts\Activate.ps1
+# Optional but recommended for NVIDIA GPUs: install a CUDA-enabled PyTorch build first
+# using the official PyTorch install selector for your CUDA version.
 pip install -e ".[dev]"
 uvicorn app.main:app --reload --port 8000
 ```
@@ -153,6 +159,13 @@ If PowerShell blocks the activation script, run this once in the same window:
 ```powershell
 Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
 ```
+
+### Hardware Acceleration Notes
+
+- LessonScribe selects the best available PyTorch device in this order: `cuda`, then `mps`, then `cpu`.
+- Windows users with an NVIDIA GPU need a CUDA-enabled PyTorch build in the backend virtual environment. If PyTorch only reports CPU support, LessonScribe will also run on CPU.
+- Apple Silicon users can benefit from PyTorch's `mps` backend when it is available in the backend environment.
+- The app shows the selected runtime device in the top-right status card.
 
 ## Frontend Setup
 
@@ -186,6 +199,7 @@ Once both servers are running:
    - `Ready`
    - `FFmpeg found`
    - `Whisper installed`
+   - `Device CUDA`, `Device MPS`, or `Device CPU`
 
 If the status says `Setup needed`, one of the local dependencies is missing or not available on `PATH`.
 
@@ -209,7 +223,7 @@ Backend:
 ```bash
 cd /Users/pietrodibello/Documents/workspace/ai/lessonscribe/backend
 source .venv/bin/activate
-pytest
+PYTHONPATH=. pytest
 ```
 
 Frontend:
@@ -258,6 +272,9 @@ The script uploads the clip, starts transcription, polls job status, fetches the
 - `Whisper` or backend dependencies missing:
   - activate the backend virtual environment
   - rerun `pip install -e ".[dev]"`
+- GPU or Apple Silicon acceleration not being used:
+  - check the top-right status card
+  - if it says `Device CPU`, verify that the backend virtual environment has a PyTorch build with support for your hardware
 - Frontend cannot reach backend:
   - make sure the backend terminal is still running on port `8000`
 - Very slow transcription:

@@ -5,6 +5,7 @@ import {
   fetchHealth,
   fetchJob,
   fetchLecture,
+  fetchLectures,
   fetchModels,
   fetchTranscript,
   importLecture,
@@ -30,10 +31,15 @@ import type {
 
 const CURRENT_LECTURE_KEY = 'lessonscribe.currentLectureId'
 
+function sortLectures(items: LectureMetadata[]): LectureMetadata[] {
+  return [...items].sort((left, right) => right.created_at.localeCompare(left.created_at))
+}
+
 function App() {
   const [health, setHealth] = useState<HealthCheck | null>(null)
   const [models, setModels] = useState<ModelInfo[]>([])
   const [selectedModel, setSelectedModel] = useState('turbo')
+  const [lectures, setLectures] = useState<LectureMetadata[]>([])
   const [lecture, setLecture] = useState<LectureMetadata | null>(null)
   const [job, setJob] = useState<JobRecord | null>(null)
   const [transcript, setTranscript] = useState<TranscriptPayload | null>(null)
@@ -45,6 +51,8 @@ function App() {
   const [isPlaying, setIsPlaying] = useState(false)
   const [busyMessage, setBusyMessage] = useState<string | null>(null)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
+  const [libraryErrorMessage, setLibraryErrorMessage] = useState<string | null>(null)
+  const [isLibraryLoading, setIsLibraryLoading] = useState(true)
   const [isImporting, setIsImporting] = useState(false)
 
   const audioRef = useRef<HTMLAudioElement>(null)
@@ -57,26 +65,72 @@ function App() {
   const isJobActive = job?.status === 'preparing' || job?.status === 'downloading-model' || job?.status === 'transcribing'
 
   useEffect(() => {
-    void fetchHealth().then(setHealth).catch((error: Error) => {
-      setErrorMessage(error.message)
-    })
-    void fetchModels().then((items) => {
-      setModels(items)
-      setSelectedModel((current) =>
-        items.some((item) => item.name === current) || !items[0] ? current : items[0].name,
-      )
-    }).catch((error: Error) => {
-      setErrorMessage(error.message)
-    })
-  }, [])
+    let cancelled = false
 
-  useEffect(() => {
-    const lectureId = window.localStorage.getItem(CURRENT_LECTURE_KEY)
-    if (!lectureId) {
-      return
+    async function initializeApp() {
+      setIsLibraryLoading(true)
+      const savedLectureId = window.localStorage.getItem(CURRENT_LECTURE_KEY)
+      const [healthResult, modelsResult, lecturesResult] = await Promise.allSettled([
+        fetchHealth(),
+        fetchModels(),
+        fetchLectures(),
+      ])
+
+      if (cancelled) {
+        return
+      }
+
+      if (healthResult.status === 'fulfilled') {
+        setHealth(healthResult.value)
+      } else {
+        setErrorMessage(healthResult.reason instanceof Error ? healthResult.reason.message : 'Unable to reach the backend.')
+      }
+
+      if (modelsResult.status === 'fulfilled') {
+        const nextModels = modelsResult.value
+        setModels(nextModels)
+        setSelectedModel((current) =>
+          nextModels.some((item) => item.name === current) || !nextModels[0] ? current : nextModels[0].name,
+        )
+      } else {
+        setErrorMessage(modelsResult.reason instanceof Error ? modelsResult.reason.message : 'Unable to load Whisper models.')
+      }
+
+      let initialLectureId = savedLectureId
+      if (lecturesResult.status === 'fulfilled') {
+        const nextLectures = sortLectures(lecturesResult.value)
+        setLectures(nextLectures)
+        setLibraryErrorMessage(null)
+        const savedLectureStillExists = savedLectureId
+          ? nextLectures.some((item) => item.id === savedLectureId)
+          : false
+        if (savedLectureId && !savedLectureStillExists) {
+          window.localStorage.removeItem(CURRENT_LECTURE_KEY)
+          initialLectureId = nextLectures[0]?.id ?? null
+        } else if (!savedLectureId) {
+          initialLectureId = nextLectures[0]?.id ?? null
+        }
+      } else {
+        setLibraryErrorMessage(
+          lecturesResult.reason instanceof Error ? lecturesResult.reason.message : 'Unable to load saved lectures.',
+        )
+      }
+
+      setIsLibraryLoading(false)
+
+      if (initialLectureId) {
+        await hydrateLecture(initialLectureId)
+      }
     }
 
-    void hydrateLecture(lectureId)
+    // `hydrateLecture` intentionally stays outside the dependency list so startup
+    // does not re-run when ordinary render-time state changes.
+    void initializeApp()
+
+    return () => {
+      cancelled = true
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   useEffect(() => {
@@ -89,6 +143,10 @@ function App() {
         .then((nextJob) => {
           setJob(nextJob)
           setBusyMessage(nextJob.message)
+          syncLectureState(nextJob.lecture_id, {
+            active_job_id: nextJob.status === 'complete' || nextJob.status === 'failed' ? null : nextJob.id,
+            status: nextJob.status,
+          })
           if (nextJob.status === 'complete') {
             void hydrateLecture(nextJob.lecture_id)
             setBusyMessage(null)
@@ -105,6 +163,7 @@ function App() {
     }, 1500)
 
     return () => window.clearInterval(interval)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [job])
 
   const syncPlaybackTime = useEffectEvent(() => {
@@ -179,10 +238,38 @@ function App() {
     audio.volume = volume
   }, [volume])
 
+  function mergeLectureIntoList(nextLecture: LectureMetadata) {
+    setLectures((current) => sortLectures([nextLecture, ...current.filter((item) => item.id !== nextLecture.id)]))
+  }
+
+  function syncLectureState(lectureId: string, updates: Partial<LectureMetadata>) {
+    setLecture((current) => (current?.id === lectureId ? { ...current, ...updates } : current))
+    setLectures((current) =>
+      sortLectures(current.map((item) => (item.id === lectureId ? { ...item, ...updates } : item))),
+    )
+  }
+
+  async function refreshLectures() {
+    try {
+      const nextLectures = sortLectures(await fetchLectures())
+      setLectures(nextLectures)
+      setLibraryErrorMessage(null)
+      return nextLectures
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unable to load saved lectures.'
+      setLibraryErrorMessage(message)
+      return null
+    } finally {
+      setIsLibraryLoading(false)
+    }
+  }
+
   async function hydrateLecture(lectureId: string) {
     try {
+      setErrorMessage(null)
       const nextLecture = await fetchLecture(lectureId)
       setLecture(nextLecture)
+      mergeLectureIntoList(nextLecture)
       setSelectedModel((current) => nextLecture.selected_model ?? current)
       window.localStorage.setItem(CURRENT_LECTURE_KEY, nextLecture.id)
 
@@ -211,10 +298,12 @@ function App() {
     try {
       const imported = await importLecture(file)
       setLecture(imported)
+      mergeLectureIntoList(imported)
       setTranscript(null)
       setSegmentViews([])
       setJob(null)
       window.localStorage.setItem(CURRENT_LECTURE_KEY, imported.id)
+      await refreshLectures()
       setBusyMessage(null)
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unable to import the lecture.'
@@ -247,9 +336,11 @@ function App() {
       const nextJob = await startTranscription(lecture.id, selectedModel)
       setJob(nextJob)
       setBusyMessage(nextJob.message)
-      setLecture((current) =>
-        current ? { ...current, status: nextJob.status, selected_model: selectedModel } : current,
-      )
+      syncLectureState(lecture.id, {
+        active_job_id: nextJob.id,
+        selected_model: selectedModel,
+        status: nextJob.status,
+      })
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unable to start transcription.'
       setErrorMessage(message)
@@ -291,7 +382,7 @@ function App() {
           <strong>{health?.status === 'ok' ? 'Ready' : 'Setup needed'}</strong>
           <span>
             {health
-              ? `FFmpeg ${health.ffmpeg_available ? 'found' : 'missing'} · Whisper ${health.whisper_installed ? 'installed' : 'missing'}`
+              ? `FFmpeg ${health.ffmpeg_available ? 'found' : 'missing'} · Whisper ${health.whisper_installed ? 'installed' : 'missing'} · Device ${health.inference_device.toUpperCase()}`
               : 'Checking backend…'}
           </span>
         </div>
@@ -340,27 +431,67 @@ function App() {
 
       <main className="workspace">
         <aside className="sidebar">
+          <section className="sidebar-card">
+            <div className="library-header">
+              <div>
+                <p className="sidebar-label">Library</p>
+                <h2>Saved lectures</h2>
+              </div>
+              <span className="library-count">{lectures.length}</span>
+            </div>
+
+            {isLibraryLoading ? (
+              <p className="sidebar-muted">Loading saved lectures…</p>
+            ) : lectures.length > 0 ? (
+              <div className="library-list" aria-label="Saved lectures">
+                {lectures.map((item) => {
+                  const isActive = item.id === lecture?.id
+                  const language = item.detected_language ?? 'pending'
+                  const model = item.selected_model ?? 'not started'
+                  return (
+                    <button
+                      key={item.id}
+                      type="button"
+                      className={`library-item${isActive ? ' library-item--active' : ''}`}
+                      aria-pressed={isActive}
+                      onClick={() => void hydrateLecture(item.id)}
+                    >
+                      <span className="library-item__title">{item.title}</span>
+                      <span className="library-item__meta">{item.original_filename}</span>
+                      <span className="library-item__meta">
+                        {formatDuration(item.duration_seconds)} · {language} · {item.status}
+                      </span>
+                      <span className="library-item__meta">
+                        Imported {formatRelativeDate(item.created_at)} · {model}
+                      </span>
+                    </button>
+                  )
+                })}
+              </div>
+            ) : (
+              <p className="sidebar-muted">No saved lectures yet. Import an MP3, M4A, or WAV file to begin.</p>
+            )}
+
+            {libraryErrorMessage ? <p className="sidebar-error">{libraryErrorMessage}</p> : null}
+          </section>
+
           <section className="sidebar-card sidebar-card--accent">
             <p className="sidebar-label">Current lecture</p>
             <h2>{lecture?.title ?? 'Waiting for audio'}</h2>
             <p>
               {lecture
-                ? `${formatDuration(lecture.duration_seconds)} · ${lecture.detected_language ?? 'language auto-detect'}`
+                ? `${formatDuration(lecture.duration_seconds)} · ${lecture.detected_language ?? 'language pending'}`
                 : 'Import an MP3, M4A, or WAV file to begin.'}
             </p>
             <div className="status-stack">
               <StatusPill label="Lecture" value={lecture?.status ?? 'uploaded'} />
-              <StatusPill label="Model" value={selectedModel} subtle />
+              <StatusPill label="Model" value={lecture?.selected_model ?? selectedModel} subtle />
             </div>
-          </section>
-
-          <section className="sidebar-card">
-            <p className="sidebar-label">Artifacts</p>
-            <ul className="artifact-list">
-              <li>{lecture ? lecture.stored_filename : 'source audio'}</li>
-              <li>transcript.json</li>
-              <li>word timestamps</li>
-            </ul>
+            <p className="sidebar-summary">
+              {lecture
+                ? `${lecture.original_filename} · imported ${formatRelativeDate(lecture.created_at)}`
+                : 'Select a lecture from the library or import a new file.'}
+            </p>
           </section>
 
           <section className="sidebar-card">

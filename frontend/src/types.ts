@@ -71,7 +71,9 @@ export interface HealthCheck {
   status: 'ok' | 'degraded'
   ffmpeg_available: boolean
   whisper_installed: boolean
+  cuda_available: boolean
+  mps_available: boolean
+  inference_device: 'cpu' | 'cuda' | 'mps'
   data_dir: string
   supported_models: string[]
 }
-

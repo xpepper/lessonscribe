@@ -6,6 +6,8 @@ import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 
+from pydantic import ValidationError
+
 from .audio import probe_duration
 from .config import Settings
 from .schemas import JobRecord, LectureMetadata, TranscriptPayload
@@ -78,6 +80,23 @@ class LectureStore:
             raise FileNotFoundError(lecture_id)
         return LectureMetadata.model_validate_json(path.read_text())
 
+    def list_lectures(self) -> list[LectureMetadata]:
+        lectures: list[LectureMetadata] = []
+        for lecture_dir in self.settings.lectures_dir.iterdir():
+            if not lecture_dir.is_dir():
+                continue
+
+            metadata_path = lecture_dir / "metadata.json"
+            if not metadata_path.exists():
+                continue
+
+            try:
+                lectures.append(LectureMetadata.model_validate_json(metadata_path.read_text()))
+            except (OSError, ValidationError, json.JSONDecodeError):
+                continue
+
+        return sorted(lectures, key=lambda lecture: lecture.created_at, reverse=True)
+
     def write_metadata(self, metadata: LectureMetadata) -> LectureMetadata:
         payload = metadata.model_copy(update={"updated_at": utc_now()})
         self.metadata_path(payload.id).write_text(payload.model_dump_json(indent=2))
@@ -115,4 +134,3 @@ class LectureStore:
         if not path.exists():
             raise FileNotFoundError(path)
         return path
-

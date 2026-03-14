@@ -19,6 +19,9 @@ class HealthCheck(BaseModel):
     status: Literal["ok", "degraded"]
     ffmpeg_available: bool
     whisper_installed: bool
+    cuda_available: bool
+    mps_available: bool
+    inference_device: Literal["cpu", "cuda", "mps"]
     data_dir: str
     supported_models: list[str]
 
@@ -86,4 +89,3 @@ class JobRecord(BaseModel):
     error: str | None = None
     created_at: str
     updated_at: str
-

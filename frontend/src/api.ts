@@ -68,6 +68,10 @@ export async function importLecture(file: File): Promise<LectureMetadata> {
   )
 }
 
+export async function fetchLectures(): Promise<LectureMetadata[]> {
+  return parseResponse<LectureMetadata[]>(await fetch(apiUrl('/lectures')))
+}
+
 export async function fetchLecture(lectureId: string): Promise<LectureMetadata> {
   return parseResponse<LectureMetadata>(await fetch(apiUrl(`/lectures/${lectureId}`)))
 }
@@ -92,4 +96,3 @@ export async function fetchJob(jobId: string): Promise<JobRecord> {
 export async function fetchTranscript(lectureId: string): Promise<TranscriptPayload> {
   return parseResponse<TranscriptPayload>(await fetch(apiUrl(`/lectures/${lectureId}/transcript`)))
 }
-

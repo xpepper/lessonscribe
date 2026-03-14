@@ -57,6 +57,9 @@ def create_app(
             status="ok" if ffmpeg_ok and whisper_status["whisper_installed"] else "degraded",
             ffmpeg_available=ffmpeg_ok,
             whisper_installed=whisper_status["whisper_installed"],
+            cuda_available=whisper_status["cuda_available"],
+            mps_available=whisper_status["mps_available"],
+            inference_device=whisper_status["inference_device"],
             data_dir=str(settings.data_dir),
             supported_models=list(settings.supported_models),
         )
@@ -95,6 +98,10 @@ def create_app(
         finally:
             await file.close()
             shutil.rmtree(temp_dir, ignore_errors=True)
+
+    @app.get("/lectures", response_model=list[LectureMetadata])
+    def lectures() -> list[LectureMetadata]:
+        return store.list_lectures()
 
     @app.get("/lectures/{lecture_id}", response_model=LectureMetadata)
     def lecture(lecture_id: str) -> LectureMetadata:

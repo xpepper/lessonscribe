@@ -28,9 +28,33 @@ class WhisperService:
     def whisper_installed(self) -> bool:
         return self._import_whisper() is not None
 
-    def preflight(self) -> dict[str, bool]:
+    def cuda_available(self) -> bool:
+        torch = self._import_torch()
+        return bool(torch is not None and torch.cuda.is_available())
+
+    def mps_available(self) -> bool:
+        torch = self._import_torch()
+        if torch is None:
+            return False
+
+        backends = getattr(torch, "backends", None)
+        mps = getattr(backends, "mps", None)
+        is_available = getattr(mps, "is_available", None)
+        return bool(callable(is_available) and is_available())
+
+    def device(self) -> str:
+        if self.cuda_available():
+            return "cuda"
+        if self.mps_available():
+            return "mps"
+        return "cpu"
+
+    def preflight(self) -> dict[str, bool | str]:
         return {
             "whisper_installed": self.whisper_installed(),
+            "cuda_available": self.cuda_available(),
+            "mps_available": self.mps_available(),
+            "inference_device": self.device(),
         }
 
     def _model_marker(self, model_name: str) -> Path:
@@ -49,21 +73,13 @@ class WhisperService:
         if model_name not in self.settings.supported_models:
             raise ValueError(f"Unsupported model '{model_name}'.")
 
-    def _device(self) -> str:
-        torch = self._import_torch()
-        if torch is None:
-            return "cpu"
-        if torch.cuda.is_available():
-            return "cuda"
-        return "cpu"
-
     def download_model(self, model_name: str) -> None:
         self._validate_model(model_name)
         whisper = self._import_whisper()
         if whisper is None:
             raise RuntimeError("Whisper is not installed. Install backend dependencies first.")
 
-        whisper.load_model(model_name, download_root=str(self.settings.models_dir), device=self._device())
+        whisper.load_model(model_name, download_root=str(self.settings.models_dir), device=self.device())
         self._model_marker(model_name).write_text("ready\n")
 
     def transcribe(self, audio_path: Path, model_name: str) -> TranscriptPayload:
@@ -72,12 +88,13 @@ class WhisperService:
         if whisper is None:
             raise RuntimeError("Whisper is not installed. Install backend dependencies first.")
 
-        model = whisper.load_model(model_name, download_root=str(self.settings.models_dir), device=self._device())
+        device = self.device()
+        model = whisper.load_model(model_name, download_root=str(self.settings.models_dir), device=device)
         result = model.transcribe(
             str(audio_path),
             word_timestamps=True,
             verbose=False,
-            fp16=self._device() == "cuda",
+            fp16=device == "cuda",
         )
         self._model_marker(model_name).write_text("ready\n")
         return normalize_transcript(result)

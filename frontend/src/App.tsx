@@ -104,6 +104,7 @@ function App() {
   const [libraryErrorMessage, setLibraryErrorMessage] = useState<string | null>(null)
   const [isLibraryLoading, setIsLibraryLoading] = useState(true)
   const [isImporting, setIsImporting] = useState(false)
+  const [showTimestamps, setShowTimestamps] = useState(true)
   const [openLectureActionsId, setOpenLectureActionsId] = useState<string | null>(null)
   const [pendingDeletionLecture, setPendingDeletionLecture] = useState<LectureMetadata | null>(null)
   const [isDeletingLecture, setIsDeletingLecture] = useState(false)
@@ -676,6 +677,14 @@ function App() {
               {busyMessage ? <p>{busyMessage}</p> : <p>Word-level sync and click-to-seek ready.</p>}
               {errorMessage ? <p className="error-text">{errorMessage}</p> : null}
             </div>
+            <button
+              type="button"
+              className="btn-ghost"
+              onClick={() => setShowTimestamps((v) => !v)}
+              disabled={segmentViews.length === 0}
+            >
+              {showTimestamps ? 'Hide timestamps' : 'Show timestamps'}
+            </button>
           </div>
 
           <div className="reader-scroll" ref={transcriptContainerRef}>
@@ -685,6 +694,7 @@ function App() {
               activeWordId={activeWordId}
               loading={Boolean(lecture && !transcript && isJobActive)}
               emptyMessage="Start a transcription to turn the lecture into a timestamped reading view."
+              showTimestamps={showTimestamps}
               onSeek={seekTo}
             />
           </div>

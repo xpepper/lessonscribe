@@ -6,6 +6,7 @@ interface TranscriptPanelProps {
   activeWordId: string | null
   emptyMessage: string
   loading: boolean
+  showTimestamps: boolean
   onSeek: (time: number) => void
 }
 
@@ -15,6 +16,7 @@ export function TranscriptPanel({
   activeWordId,
   emptyMessage,
   loading,
+  showTimestamps,
   onSeek,
 }: TranscriptPanelProps) {
   if (loading) {
@@ -42,13 +44,15 @@ export function TranscriptPanel({
           className={`segment-card${segment.id === activeSegmentId ? ' segment-card--active' : ''}`}
           data-segment-id={segment.id}
         >
-          <button
-            type="button"
-            className="segment-timestamp"
-            onClick={() => onSeek(segment.start)}
-          >
-            {formatTimestamp(segment.start)}
-          </button>
+          {showTimestamps && (
+            <button
+              type="button"
+              className="segment-timestamp"
+              onClick={() => onSeek(segment.start)}
+            >
+              {formatTimestamp(segment.start)}
+            </button>
+          )}
           <p className="segment-text">
             {segment.words.length > 0
               ? segment.words.map((word) => (

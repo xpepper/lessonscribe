@@ -60,7 +60,7 @@ export function TranscriptPanel({
             <button
               type="button"
               className="segment-timestamp"
-              onClick={() => onSeek(segment.start)}
+              onClick={(e) => { e.stopPropagation(); onSeek(segment.start) }}
             >
               {formatTimestamp(segment.start)}
             </button>

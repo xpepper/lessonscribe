@@ -351,6 +351,67 @@ def test_happy_path_import_transcribe_and_fetch_transcript(tmp_path: Path) -> No
     assert audio_response.status_code == 200
 
 
+def test_update_transcript(tmp_path: Path) -> None:
+    client = make_client(tmp_path)
+    audio_path = tmp_path / "sample.wav"
+    write_test_wav(audio_path)
+
+    with audio_path.open("rb") as handle:
+        import_response = client.post(
+            "/lectures/import",
+            files={"file": ("sample.wav", handle, "audio/wav")},
+        )
+
+    lecture = import_response.json()
+    lecture_id = lecture["id"]
+
+    # First create a transcript via transcribe
+    job_response = client.post(
+        f"/lectures/{lecture_id}/transcribe",
+        json={"model": "base"},
+    )
+    assert job_response.status_code == 200
+    job_id = job_response.json()["id"]
+
+    for _ in range(40):
+        job = client.get(f"/jobs/{job_id}")
+        if job.json()["status"] in {"complete", "failed"}:
+            break
+        time.sleep(0.05)
+
+    # PUT an edited transcript payload
+    edited_payload = {
+        "text": "ciao mondo",
+        "language": "it",
+        "segments": [{"id": "s1", "start": 0.0, "end": 3.0, "text": "ciao mondo"}],
+        "words": [],
+    }
+    put_response = client.put(f"/lectures/{lecture_id}/transcript", json=edited_payload)
+
+    assert put_response.status_code == 200
+    assert put_response.json()["text"] == "ciao mondo"
+
+    # GET the transcript back and assert it's persisted
+    get_response = client.get(f"/lectures/{lecture_id}/transcript")
+    assert get_response.status_code == 200
+    assert get_response.json()["text"] == "ciao mondo"
+    assert get_response.json()["segments"][0]["id"] == "s1"
+
+
+def test_update_transcript_returns_404_for_unknown_lecture(tmp_path: Path) -> None:
+    client = make_client(tmp_path)
+
+    edited_payload = {
+        "text": "ciao mondo",
+        "language": "it",
+        "segments": [{"id": "s1", "start": 0.0, "end": 3.0, "text": "ciao mondo"}],
+        "words": [],
+    }
+    response = client.put("/lectures/nonexistent-lecture/transcript", json=edited_payload)
+
+    assert response.status_code == 404
+
+
 def test_list_lectures_includes_transcribed_and_untranscribed_items(tmp_path: Path) -> None:
     client = make_client(tmp_path)
     first_audio_path = tmp_path / "transcribed.wav"

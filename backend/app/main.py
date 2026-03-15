@@ -165,6 +165,14 @@ def create_app(
         except FileNotFoundError as exc:
             raise HTTPException(status_code=404, detail="Transcript not found.") from exc
 
+    @app.put("/lectures/{lecture_id}/transcript", response_model=TranscriptPayload)
+    def update_transcript(lecture_id: str, payload: TranscriptPayload) -> TranscriptPayload:
+        try:
+            store.read_metadata(lecture_id)
+        except FileNotFoundError:
+            raise HTTPException(status_code=404, detail="Lecture not found.")
+        return store.write_transcript(lecture_id, payload)
+
     @app.get("/lectures/{lecture_id}/audio")
     def audio(lecture_id: str) -> FileResponse:
         try:

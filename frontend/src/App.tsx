@@ -14,7 +14,6 @@ import {
   startTranscription,
   updateTranscript,
 } from './api'
-import { EditSegmentModal } from './components/EditSegmentModal'
 import { TranscriptPanel } from './components/TranscriptPanel'
 import { formatDuration, formatRelativeDate } from './lib/format'
 import {
@@ -780,20 +779,13 @@ function App() {
               emptyMessage="Start a transcription to turn the lecture into a timestamped reading view."
               showTimestamps={showTimestamps}
               isEditMode={isEditMode}
+              editingSegmentId={editingSegmentId}
               onSeek={seekTo}
               onEditSegment={setEditingSegmentId}
+              onSaveSegmentEdit={saveSegmentEdit}
+              onCancelSegmentEdit={() => setEditingSegmentId(null)}
             />
           </div>
-          {isEditMode && editingSegmentId && (() => {
-            const seg = draftSegments.find((s) => s.id === editingSegmentId)
-            return seg ? (
-              <EditSegmentModal
-                segment={seg}
-                onSave={saveSegmentEdit}
-                onClose={() => setEditingSegmentId(null)}
-              />
-            ) : null
-          })()}
         </section>
       </main>
 

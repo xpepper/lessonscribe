@@ -1,3 +1,4 @@
+import { useEffect, useRef, useState } from 'react'
 import type { TranscriptSegmentView } from '../types'
 
 interface TranscriptPanelProps {
@@ -8,8 +9,11 @@ interface TranscriptPanelProps {
   loading: boolean
   showTimestamps: boolean
   isEditMode: boolean
+  editingSegmentId: string | null
   onSeek: (time: number) => void
   onEditSegment?: (segmentId: string) => void
+  onSaveSegmentEdit?: (segmentId: string, newText: string) => void
+  onCancelSegmentEdit?: () => void
 }
 
 export function TranscriptPanel({
@@ -20,8 +24,11 @@ export function TranscriptPanel({
   loading,
   showTimestamps,
   isEditMode,
+  editingSegmentId,
   onSeek,
   onEditSegment,
+  onSaveSegmentEdit,
+  onCancelSegmentEdit,
 }: TranscriptPanelProps) {
   if (loading) {
     return (
@@ -51,34 +58,55 @@ export function TranscriptPanel({
             isEditMode ? 'segment-card--editable' : '',
           ].filter(Boolean).join(' ')}
           data-segment-id={segment.id}
-          onClick={isEditMode ? () => onEditSegment?.(segment.id) : undefined}
-          role={isEditMode ? 'button' : undefined}
-          tabIndex={isEditMode ? 0 : undefined}
-          onKeyDown={isEditMode ? (e) => { if (e.key === 'Enter') onEditSegment?.(segment.id) } : undefined}
+          onClick={isEditMode && editingSegmentId !== segment.id ? () => onEditSegment?.(segment.id) : undefined}
+          role={isEditMode && editingSegmentId !== segment.id ? 'button' : undefined}
+          tabIndex={isEditMode && editingSegmentId !== segment.id ? 0 : undefined}
+          onKeyDown={isEditMode && editingSegmentId !== segment.id ? (e) => { if (e.key === 'Enter') onEditSegment?.(segment.id) } : undefined}
         >
-          {showTimestamps && (
-            <button
-              type="button"
-              className="segment-timestamp"
-              onClick={(e) => { e.stopPropagation(); onSeek(segment.start) }}
-            >
-              {formatTimestamp(segment.start)}
-            </button>
+          {isEditMode && editingSegmentId === segment.id ? (
+            <SegmentInlineEditor
+              segment={segment}
+              onSave={onSaveSegmentEdit}
+              onCancel={onCancelSegmentEdit}
+            />
+          ) : (
+            <>
+              {showTimestamps && (
+                <button
+                  type="button"
+                  className="segment-timestamp"
+                  onClick={(e) => { e.stopPropagation(); onSeek(segment.start) }}
+                >
+                  {formatTimestamp(segment.start)}
+                </button>
+              )}
+              <p className="segment-text">
+                {segment.words.length > 0
+                  ? segment.words.map((word) => (
+                      <button
+                        key={word.id}
+                        type="button"
+                        className={`word-chip${word.id === activeWordId ? ' word-chip--active' : ''}`}
+                        onClick={() => onSeek(word.start)}
+                      >
+                        {word.text}
+                      </button>
+                    ))
+                  : (
+                    // No word-level timing (e.g. manually edited segment) — make whole text seek to segment start
+                    <span
+                      className="segment-text-seekable"
+                      role="button"
+                      tabIndex={0}
+                      onClick={(e) => { e.stopPropagation(); onSeek(segment.start) }}
+                      onKeyDown={(e) => { if (e.key === 'Enter') onSeek(segment.start) }}
+                    >
+                      {segment.text}
+                    </span>
+                  )}
+              </p>
+            </>
           )}
-          <p className="segment-text">
-            {segment.words.length > 0
-              ? segment.words.map((word) => (
-                  <button
-                    key={word.id}
-                    type="button"
-                    className={`word-chip${word.id === activeWordId ? ' word-chip--active' : ''}`}
-                    onClick={() => onSeek(word.start)}
-                  >
-                    {word.text}
-                  </button>
-                ))
-              : segment.text}
-          </p>
         </article>
       ))}
     </div>
@@ -92,3 +120,47 @@ function formatTimestamp(totalSeconds: number): string {
   return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`
 }
 
+function SegmentInlineEditor({
+  segment,
+  onSave,
+  onCancel,
+}: {
+  segment: TranscriptSegmentView
+  onSave?: (segmentId: string, newText: string) => void
+  onCancel?: () => void
+}) {
+  const [text, setText] = useState(segment.text)
+  const textareaRef = useRef<HTMLTextAreaElement>(null)
+
+  useEffect(() => {
+    textareaRef.current?.focus()
+    // put cursor at end
+    const len = segment.text.length
+    textareaRef.current?.setSelectionRange(len, len)
+  }, [segment.text])
+
+  return (
+    <div className="segment-edit-inline" onKeyDown={(e) => { if (e.key === 'Escape') onCancel?.() }}>
+      <textarea
+        ref={textareaRef}
+        className="segment-edit-textarea"
+        value={text}
+        onChange={(e) => setText(e.target.value)}
+        rows={3}
+      />
+      <div className="segment-edit-actions">
+        <button type="button" className="btn-ghost" onClick={onCancel}>
+          Cancel
+        </button>
+        <button
+          type="button"
+          className="btn-primary btn-small"
+          disabled={text.trim() === ''}
+          onClick={() => onSave?.(segment.id, text.trim())}
+        >
+          Save
+        </button>
+      </div>
+    </div>
+  )
+}

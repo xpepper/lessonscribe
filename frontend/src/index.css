@@ -837,3 +837,51 @@ input[type='range'] {
     max-height: none;
   }
 }
+
+/* Inline segment editor (edit mode) */
+.segment-edit-inline {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 4px 0;
+}
+
+.segment-edit-textarea {
+  width: 100%;
+  font: inherit;
+  font-size: 1rem;
+  line-height: 1.6;
+  padding: 8px 10px;
+  border: 2px solid var(--accent);
+  border-radius: 8px;
+  background: var(--panel-soft);
+  color: var(--ink);
+  resize: vertical;
+  box-sizing: border-box;
+}
+
+.segment-edit-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.btn-small {
+  padding: 4px 12px;
+  font-size: 0.85rem;
+}
+
+/* Seekable plain-text segment (no word-level timing) */
+.segment-text-seekable {
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  display: inline;
+}
+.segment-text-seekable:hover {
+  opacity: 0.75;
+}

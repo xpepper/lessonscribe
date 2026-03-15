@@ -505,7 +505,7 @@ function App() {
   }
 
   async function commitEdits() {
-    if (!lecture || !transcript) return
+    if (!lecture || !transcript || isSavingTranscript) return
     setIsSavingTranscript(true)
     try {
       const updatedText = draftSegments.map((s) => s.text).join(' ')

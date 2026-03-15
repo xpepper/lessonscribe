@@ -120,3 +120,15 @@ export async function fetchJob(jobId: string): Promise<JobRecord> {
 export async function fetchTranscript(lectureId: string): Promise<TranscriptPayload> {
   return parseResponse<TranscriptPayload>(await fetch(apiUrl(`/lectures/${lectureId}/transcript`)))
 }
+
+export async function updateTranscript(
+  lectureId: string,
+  payload: TranscriptPayload,
+): Promise<TranscriptPayload> {
+  const response = await fetch(apiUrl(`/lectures/${lectureId}/transcript`), {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  })
+  return parseResponse<TranscriptPayload>(response)
+}

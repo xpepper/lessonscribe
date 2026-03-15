@@ -680,6 +680,7 @@ function App() {
             <button
               type="button"
               className="btn-ghost"
+              aria-pressed={showTimestamps}
               onClick={() => setShowTimestamps((v) => !v)}
               disabled={segmentViews.length === 0}
             >

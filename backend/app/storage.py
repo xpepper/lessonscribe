@@ -91,7 +91,7 @@ class LectureStore:
         path = self.metadata_path(lecture_id)
         if not path.exists():
             raise FileNotFoundError(lecture_id)
-        return LectureMetadata.model_validate_json(path.read_text())
+        return LectureMetadata.model_validate_json(path.read_text(encoding="utf-8"))
 
     def list_lectures(self) -> list[LectureMetadata]:
         lectures: list[LectureMetadata] = []
@@ -104,7 +104,7 @@ class LectureStore:
                 continue
 
             try:
-                lectures.append(LectureMetadata.model_validate_json(metadata_path.read_text()))
+                lectures.append(LectureMetadata.model_validate_json(metadata_path.read_text(encoding="utf-8")))
             except (OSError, ValidationError, json.JSONDecodeError):
                 continue
 
@@ -135,7 +135,7 @@ class LectureStore:
         path = self.jobs_path(job_id)
         if not path.exists():
             raise FileNotFoundError(job_id)
-        return JobRecord.model_validate_json(path.read_text())
+        return JobRecord.model_validate_json(path.read_text(encoding="utf-8"))
 
     def write_transcript(self, lecture_id: str, transcript: TranscriptPayload) -> TranscriptPayload:
         self._write_json_file(self.transcript_path(lecture_id), transcript.model_dump_json(indent=2))
@@ -145,7 +145,7 @@ class LectureStore:
         path = self.transcript_path(lecture_id)
         if not path.exists():
             raise FileNotFoundError(lecture_id)
-        return TranscriptPayload.model_validate_json(path.read_text())
+        return TranscriptPayload.model_validate_json(path.read_text(encoding="utf-8"))
 
     def audio_file(self, lecture_id: str) -> Path:
         metadata = self.read_metadata(lecture_id)

@@ -155,5 +155,6 @@ Invoke-Checked -Command @($BackendPython, "-m", "app.doctor") -WorkingDirectory 
 
 Write-Host ""
 Write-Host "Bootstrap complete." -ForegroundColor Green
+Write-Host "NOTE: If any tools were just installed, open a new PowerShell window before starting." -ForegroundColor Yellow
 Write-Host "Daily startup command:"
 Write-Host "powershell -ExecutionPolicy Bypass -File .\scripts\start-windows.ps1"

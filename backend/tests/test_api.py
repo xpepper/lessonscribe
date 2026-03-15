@@ -397,6 +397,9 @@ def test_update_transcript(tmp_path: Path) -> None:
     assert get_response.json()["text"] == "ciao mondo"
     assert get_response.json()["segments"][0]["id"] == "s1"
 
+    lecture_meta = client.get(f"/lectures/{lecture_id}").json()
+    assert lecture_meta["has_transcript"] is True
+
 
 def test_update_transcript_returns_404_for_unknown_lecture(tmp_path: Path) -> None:
     client = make_client(tmp_path)

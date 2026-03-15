@@ -171,7 +171,9 @@ def create_app(
             store.read_metadata(lecture_id)
         except FileNotFoundError:
             raise HTTPException(status_code=404, detail="Lecture not found.")
-        return store.write_transcript(lecture_id, payload)
+        saved = store.write_transcript(lecture_id, payload)
+        store.update_metadata(lecture_id, has_transcript=True)
+        return saved
 
     @app.get("/lectures/{lecture_id}/audio")
     def audio(lecture_id: str) -> FileResponse:

@@ -12,6 +12,7 @@ import {
   importLecture,
   resolveAssetUrl,
   startTranscription,
+  updateTranscript,
 } from './api'
 import { TranscriptPanel } from './components/TranscriptPanel'
 import { formatDuration, formatRelativeDate } from './lib/format'
@@ -105,6 +106,10 @@ function App() {
   const [isLibraryLoading, setIsLibraryLoading] = useState(true)
   const [isImporting, setIsImporting] = useState(false)
   const [showTimestamps, setShowTimestamps] = useState(true)
+  const [isEditMode, setIsEditMode] = useState(false)
+  const [draftSegments, setDraftSegments] = useState<TranscriptSegmentView[]>([])
+  const [editingSegmentId, setEditingSegmentId] = useState<string | null>(null)
+  const [isSavingTranscript, setIsSavingTranscript] = useState(false)
   const [openLectureActionsId, setOpenLectureActionsId] = useState<string | null>(null)
   const [pendingDeletionLecture, setPendingDeletionLecture] = useState<LectureMetadata | null>(null)
   const [isDeletingLecture, setIsDeletingLecture] = useState(false)
@@ -475,6 +480,52 @@ function App() {
     }
     audio.currentTime = time
     setCurrentTime(time)
+  }
+
+  function enterEditMode() {
+    setDraftSegments(segmentViews.map((s) => ({ ...s, words: [...s.words] })))
+    setIsEditMode(true)
+  }
+
+  function discardEdits() {
+    setDraftSegments([])
+    setEditingSegmentId(null)
+    setIsEditMode(false)
+  }
+
+  function saveSegmentEdit(segmentId: string, newText: string) {
+    setDraftSegments((prev) =>
+      prev.map((s) =>
+        s.id === segmentId
+          ? { ...s, text: newText, words: [] }
+          : s,
+      ),
+    )
+    setEditingSegmentId(null)
+  }
+
+  async function commitEdits() {
+    if (!lecture || !transcript) return
+    setIsSavingTranscript(true)
+    try {
+      const updatedText = draftSegments.map((s) => s.text).join(' ')
+      const updatedPayload: TranscriptPayload = {
+        ...transcript,
+        text: updatedText,
+        segments: draftSegments.map(({ words: _words, ...seg }) => seg),
+        words: draftSegments.flatMap((s) => s.words),
+      }
+      const saved = await updateTranscript(lecture.id, updatedPayload)
+      setTranscript(saved)
+      setSegmentViews(buildSegmentViews(saved))
+      setIsEditMode(false)
+      setDraftSegments([])
+      setEditingSegmentId(null)
+    } catch (err) {
+      setErrorMessage(err instanceof Error ? err.message : 'Failed to save edits.')
+    } finally {
+      setIsSavingTranscript(false)
+    }
   }
 
   return (

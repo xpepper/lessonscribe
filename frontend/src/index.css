@@ -799,6 +799,19 @@ input[type='range'] {
   cursor: default;
 }
 
+.segment-card--editable {
+  cursor: pointer;
+}
+.segment-card--editable:hover {
+  background: var(--accent-soft);
+}
+
+.edit-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
 @media (max-width: 1100px) {
   .toolbar {
     grid-template-columns: 1fr;

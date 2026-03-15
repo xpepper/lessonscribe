@@ -7,7 +7,9 @@ interface TranscriptPanelProps {
   emptyMessage: string
   loading: boolean
   showTimestamps: boolean
+  isEditMode: boolean
   onSeek: (time: number) => void
+  onEditSegment?: (segmentId: string) => void
 }
 
 export function TranscriptPanel({
@@ -17,7 +19,9 @@ export function TranscriptPanel({
   emptyMessage,
   loading,
   showTimestamps,
+  isEditMode,
   onSeek,
+  onEditSegment,
 }: TranscriptPanelProps) {
   if (loading) {
     return (
@@ -41,8 +45,16 @@ export function TranscriptPanel({
       {segments.map((segment) => (
         <article
           key={segment.id}
-          className={`segment-card${segment.id === activeSegmentId ? ' segment-card--active' : ''}`}
+          className={[
+            'segment-card',
+            segment.id === activeSegmentId ? 'segment-card--active' : '',
+            isEditMode ? 'segment-card--editable' : '',
+          ].filter(Boolean).join(' ')}
           data-segment-id={segment.id}
+          onClick={isEditMode ? () => onEditSegment?.(segment.id) : undefined}
+          role={isEditMode ? 'button' : undefined}
+          tabIndex={isEditMode ? 0 : undefined}
+          onKeyDown={isEditMode ? (e) => { if (e.key === 'Enter') onEditSegment?.(segment.id) } : undefined}
         >
           {showTimestamps && (
             <button

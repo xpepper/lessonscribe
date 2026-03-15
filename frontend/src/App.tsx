@@ -14,6 +14,7 @@ import {
   startTranscription,
   updateTranscript,
 } from './api'
+import { EditSegmentModal } from './components/EditSegmentModal'
 import { TranscriptPanel } from './components/TranscriptPanel'
 import { formatDuration, formatRelativeDate } from './lib/format'
 import {
@@ -715,15 +716,22 @@ function App() {
 
         <section className="reader-card">
           <div className="reader-header">
-            <div>
-              <p className="eyebrow eyebrow--muted">Transcript</p>
-              <h2>{lecture?.title ?? 'Lecture transcript'}</h2>
-              <p className="reader-meta">
-                {lecture
-                  ? `${formatRelativeDate(lecture.updated_at)} · ${lecture.original_filename}`
-                  : 'Upload a lecture to generate timestamped text.'}
-              </p>
-            </div>
+            {isEditMode ? (
+              <div>
+                <h2>✏ Editing "{lecture?.title}"</h2>
+                <p className="reader-meta">Click any segment to edit its text.</p>
+              </div>
+            ) : (
+              <div>
+                <p className="eyebrow eyebrow--muted">Transcript</p>
+                <h2>{lecture?.title ?? 'Lecture transcript'}</h2>
+                <p className="reader-meta">
+                  {lecture
+                    ? `${formatRelativeDate(lecture.updated_at)} · ${lecture.original_filename}`
+                    : 'Upload a lecture to generate timestamped text.'}
+                </p>
+              </div>
+            )}
             <div className="status-panel">
               {busyMessage ? <p>{busyMessage}</p> : <p>Word-level sync and click-to-seek ready.</p>}
               {errorMessage ? <p className="error-text">{errorMessage}</p> : null}
@@ -737,19 +745,55 @@ function App() {
             >
               {showTimestamps ? 'Hide timestamps' : 'Show timestamps'}
             </button>
+            {!isEditMode && transcript && (
+              <button type="button" className="btn-ghost" onClick={enterEditMode}>
+                Edit transcript
+              </button>
+            )}
+            {isEditMode && (
+              <div className="edit-actions">
+                <button
+                  type="button"
+                  className="btn-ghost"
+                  onClick={discardEdits}
+                >
+                  Discard changes
+                </button>
+                <button
+                  type="button"
+                  className="btn-primary"
+                  onClick={() => void commitEdits()}
+                  disabled={isSavingTranscript}
+                >
+                  {isSavingTranscript ? 'Saving…' : 'Done editing'}
+                </button>
+              </div>
+            )}
           </div>
 
           <div className="reader-scroll" ref={transcriptContainerRef}>
             <TranscriptPanel
-              segments={segmentViews}
-              activeSegmentId={activeSegmentId}
-              activeWordId={activeWordId}
+              segments={isEditMode ? draftSegments : segmentViews}
+              activeSegmentId={isEditMode ? null : activeSegmentId}
+              activeWordId={isEditMode ? null : activeWordId}
               loading={Boolean(lecture && !transcript && isJobActive)}
               emptyMessage="Start a transcription to turn the lecture into a timestamped reading view."
               showTimestamps={showTimestamps}
+              isEditMode={isEditMode}
               onSeek={seekTo}
+              onEditSegment={setEditingSegmentId}
             />
           </div>
+          {isEditMode && editingSegmentId && (() => {
+            const seg = draftSegments.find((s) => s.id === editingSegmentId)
+            return seg ? (
+              <EditSegmentModal
+                segment={seg}
+                onSave={saveSegmentEdit}
+                onClose={() => setEditingSegmentId(null)}
+              />
+            ) : null
+          })()}
         </section>
       </main>
 

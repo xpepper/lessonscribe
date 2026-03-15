@@ -27,9 +27,10 @@ This repository contains source code, not a packaged installer yet. To use the a
 
 ### Windows PowerShell
 
-Clone the repository, run the one-time bootstrap script, then use the daily start script:
+For a clean Windows 10 or Windows 11 setup, follow these steps:
 
 ```powershell
+winget install --id Git.Git --exact --accept-package-agreements --accept-source-agreements
 git clone <your-repo-url>
 cd lessonscribe
 powershell -ExecutionPolicy Bypass -File .\scripts\bootstrap-windows.ps1
@@ -38,6 +39,7 @@ powershell -ExecutionPolicy Bypass -File .\scripts\start-windows.ps1
 
 Notes:
 
+- install Git first so you can clone the repository and access the bootstrap script
 - `bootstrap-windows.ps1` is the one-time setup path for Windows 10 and Windows 11 source installs
 - `start-windows.ps1` is the day-to-day command after setup
 - the start script opens backend and frontend logs in separate PowerShell windows and then opens the app in your browser
@@ -105,27 +107,44 @@ The recommended Windows path is to let the repository bootstrap itself with `win
    winget --version
    ```
 
-2. Clone the repository:
+2. Install Git if you do not already have it:
+
+   ```powershell
+   winget install --id Git.Git --exact --accept-package-agreements --accept-source-agreements
+   ```
+
+3. Clone the repository:
 
    ```powershell
    git clone <your-repo-url>
    cd lessonscribe
    ```
 
-3. Run the one-time bootstrap script:
+4. Run the one-time bootstrap script:
 
    ```powershell
    powershell -ExecutionPolicy Bypass -File .\scripts\bootstrap-windows.ps1
    ```
 
-The script installs or verifies:
+5. Start the app:
 
-- Git
+   ```powershell
+   powershell -ExecutionPolicy Bypass -File .\scripts\start-windows.ps1
+   ```
+
+The bootstrap script installs or verifies:
+
 - Python 3.12
 - Node.js LTS
 - FFmpeg
 - backend Python dependencies
 - frontend npm dependencies
+
+After that, the day-to-day command is:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\start-windows.ps1
+```
 
 If you prefer a fully manual setup, use the advanced backend and frontend sections below instead.
 

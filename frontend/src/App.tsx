@@ -41,6 +41,50 @@ function lectureIsRunning(lecture: LectureMetadata): boolean {
   return lecture.active_job_id !== null && ACTIVE_TRANSCRIPTION_STATUSES.has(lecture.status)
 }
 
+function buildSetupCardState(health: HealthCheck | null, healthError: string | null) {
+  if (!health) {
+    return {
+      title: healthError ? 'Backend offline' : 'Checking backend…',
+      details: 'Status card updates after the API responds.',
+      guidance: healthError
+        ? 'Start LessonScribe with the Windows start script, or make sure the backend is running on port 8000.'
+        : 'Waiting for the local API health check.',
+    }
+  }
+
+  const details = `FFmpeg ${health.ffmpeg_available ? 'found' : 'missing'} · Whisper ${health.whisper_installed ? 'installed' : 'missing'} · Device ${health.inference_device.toUpperCase()}`
+
+  if (health.status === 'ok') {
+    return {
+      title: 'Ready',
+      details,
+      guidance: 'Upload audio and choose a model to start transcribing.',
+    }
+  }
+
+  if (!health.ffmpeg_available && !health.whisper_installed) {
+    return {
+      title: 'Setup needed',
+      details,
+      guidance: 'Run the Windows bootstrap script, then restart the app.',
+    }
+  }
+
+  if (!health.ffmpeg_available) {
+    return {
+      title: 'Setup needed',
+      details,
+      guidance: 'FFmpeg is missing. Re-run the bootstrap script or install FFmpeg, then restart the app.',
+    }
+  }
+
+  return {
+    title: 'Setup needed',
+    details,
+    guidance: 'Whisper dependencies are missing. Re-run backend setup, then restart the app.',
+  }
+}
+
 function App() {
   const [health, setHealth] = useState<HealthCheck | null>(null)
   const [models, setModels] = useState<ModelInfo[]>([])
@@ -73,6 +117,7 @@ function App() {
   const navigationSegments = segmentViews.slice(0, 8)
   const audioUrl = lecture ? resolveAssetUrl(lecture.audio_url) : null
   const isJobActive = job?.status === 'preparing' || job?.status === 'downloading-model' || job?.status === 'transcribing'
+  const setupCard = buildSetupCardState(health, health ? null : errorMessage)
 
   useEffect(() => {
     let cancelled = false
@@ -440,12 +485,9 @@ function App() {
         </div>
         <div className="setup-card">
           <p>Backend status</p>
-          <strong>{health?.status === 'ok' ? 'Ready' : 'Setup needed'}</strong>
-          <span>
-            {health
-              ? `FFmpeg ${health.ffmpeg_available ? 'found' : 'missing'} · Whisper ${health.whisper_installed ? 'installed' : 'missing'} · Device ${health.inference_device.toUpperCase()}`
-              : 'Checking backend…'}
-          </span>
+          <strong>{setupCard.title}</strong>
+          <span>{setupCard.details}</span>
+          <span className="setup-card__hint">{setupCard.guidance}</span>
         </div>
       </header>
 

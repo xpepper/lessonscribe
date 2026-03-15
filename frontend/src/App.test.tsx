@@ -102,6 +102,35 @@ describe('App', () => {
     expect(apiMocks.fetchLecture).toHaveBeenCalledWith(biology.id)
   })
 
+  it('shows bootstrap guidance when backend health reports missing setup dependencies', async () => {
+    apiMocks.fetchHealth.mockResolvedValue({
+      ...health,
+      status: 'degraded',
+      ffmpeg_available: false,
+      whisper_installed: false,
+    })
+    apiMocks.fetchLectures.mockResolvedValue([])
+
+    render(<App />)
+
+    expect(await screen.findByText('Setup needed')).toBeInTheDocument()
+    expect(screen.getByText(/Run the Windows bootstrap script, then restart the app\./i)).toBeInTheDocument()
+    expect(screen.getByText(/FFmpeg missing · Whisper missing · Device CPU/i)).toBeInTheDocument()
+  })
+
+  it('shows backend offline guidance when the health check cannot be reached', async () => {
+    apiMocks.fetchHealth.mockRejectedValue(new Error('Unable to reach the backend.'))
+    apiMocks.fetchModels.mockResolvedValue(models)
+    apiMocks.fetchLectures.mockResolvedValue([])
+
+    render(<App />)
+
+    expect(await screen.findByText('Backend offline')).toBeInTheDocument()
+    expect(
+      screen.getByText(/Start LessonScribe with the Windows start script, or make sure the backend is running on port 8000\./i),
+    ).toBeInTheDocument()
+  })
+
   it('hydrates the workspace when a lecture is selected from the sidebar', async () => {
     const biology = makeLecture({
       id: 'lecture-biology',

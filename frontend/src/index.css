@@ -111,6 +111,11 @@ button {
   gap: 6px;
 }
 
+.setup-card__hint {
+  font-size: 0.9rem;
+  line-height: 1.45;
+}
+
 .setup-card p,
 .setup-card span,
 .reader-meta,

@@ -19,9 +19,10 @@ This repository contains source code, not a packaged installer yet. To use the a
   - `mps` for Apple Silicon
   - `cpu` otherwise
 - Persist imported audio and transcript artifacts locally
-- Display segment and word timestamps
+- Display segment and word timestamps, with a toggle to show or hide them
 - Highlight the active segment and current word during playback
 - Click a segment or word to jump the audio player
+- Edit transcript segments inline: click "Edit transcript", click any segment to correct its text, then "Done editing" to save
 
 ## Quick Start
 
@@ -277,20 +278,21 @@ If the status says `Setup needed`, one of the local dependencies is missing or n
 
 ## Running Tests
 
-Backend:
+Backend tests use pytest. The backend package is installed in editable mode, so no `PYTHONPATH` override is needed:
 
 ```bash
 cd backend
-source .venv/bin/activate
-PYTHONPATH=. pytest
+source .venv/bin/activate   # skip on Windows: use .venv\Scripts\activate
+pytest
 ```
 
-Frontend:
+Or without activating the virtualenv:
 
 ```bash
-cd frontend
-npm test -- --run
+cd backend && .venv/bin/pytest tests/ -v
 ```
+
+There are no automated frontend tests at this time.
 
 ## Quick Smoke Test
 

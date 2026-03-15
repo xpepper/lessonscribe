@@ -31,7 +31,7 @@ For a clean Windows 10 or Windows 11 setup, follow these steps:
 
 ```powershell
 winget install --id Git.Git --exact --accept-package-agreements --accept-source-agreements
-git clone <your-repo-url>
+git clone https://github.com/xpepper/lessonscribe
 cd lessonscribe
 powershell -ExecutionPolicy Bypass -File .\scripts\bootstrap-windows.ps1
 powershell -ExecutionPolicy Bypass -File .\scripts\start-windows.ps1
